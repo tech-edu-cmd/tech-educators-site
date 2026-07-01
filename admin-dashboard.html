@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Tech Educators — Leads Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+<!-- Netlify Identity widget: handles real login (signup/password/reset), no password in this file -->
+<script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
+<style>
+  * { font-family: 'Inter', sans-serif; }
+  body { background: #09090b; color: #fafafa; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #18181b; }
+  ::-webkit-scrollbar-thumb { background: #7c3aed; border-radius: 3px; }
+  .glow { box-shadow: 0 0 20px rgba(124,58,237,0.35); }
+  tbody tr:hover { background: rgba(124,58,237,0.06); }
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- ── LOGIN GATE ── -->
+<div id="login-screen" class="min-h-screen flex items-center justify-center px-4">
+  <div class="w-full max-w-sm p-8 rounded-3xl border border-zinc-800 bg-zinc-900 text-center">
+    <div class="flex items-center gap-2 font-bold text-lg mb-1 justify-center">
+      <span class="text-violet-500 font-mono">&gt;_</span> Tech Educators
+    </div>
+    <p class="text-zinc-500 text-sm mb-6">Admin Dashboard</p>
+    <button id="login-btn" class="w-full bg-violet-600 hover:bg-violet-700 text-white font-bold py-3 rounded-xl transition-colors glow">
+      Log In
+    </button>
+    <p class="text-zinc-600 text-xs mt-4">Secure login powered by Netlify Identity</p>
+  </div>
+</div>
+
+<!-- ── DASHBOARD ── -->
+<div id="dashboard-screen" class="hidden min-h-screen px-4 py-8">
+  <div class="max-w-6xl mx-auto">
+
+    <div class="flex items-center justify-between mb-8 flex-wrap gap-4">
+      <div class="flex items-center gap-2 font-bold text-lg">
+        <span class="text-violet-500 font-mono">&gt;_</span> Tech Educators — Leads
+      </div>
+      <div class="flex gap-3">
+        <button id="refresh-btn" class="border border-zinc-700 hover:border-violet-500 text-zinc-300 text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
+          ↻ Refresh
+        </button>
+        <button id="logout-btn" class="border border-zinc-700 hover:border-red-500/50 text-zinc-400 text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
+          Log Out
+        </button>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div class="p-5 rounded-2xl border border-zinc-800 bg-zinc-900">
+        <div id="stat-total" class="text-3xl font-black text-violet-500">--</div>
+        <div class="text-zinc-500 text-sm mt-1">Total Leads</div>
+      </div>
+      <div class="p-5 rounded-2xl border border-zinc-800 bg-zinc-900">
+        <div id="stat-today" class="text-3xl font-black text-violet-500">--</div>
+        <div class="text-zinc-500 text-sm mt-1">Today</div>
+      </div>
+      <div class="p-5 rounded-2xl border border-zinc-800 bg-zinc-900">
+        <div id="stat-week" class="text-3xl font-black text-violet-500">--</div>
+        <div class="text-zinc-500 text-sm mt-1">Last 7 Days</div>
+      </div>
+      <div class="p-5 rounded-2xl border border-zinc-800 bg-zinc-900">
+        <div id="stat-course" class="text-xl font-black text-violet-500">--</div>
+        <div class="text-zinc-500 text-sm mt-1">Top Course</div>
+      </div>
+    </div>
+
+    <!-- Search -->
+    <div class="flex items-center gap-3 mb-4">
+      <input type="text" id="search-input" placeholder="Search by name, email, phone, or course..."
+        class="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-violet-500 transition-colors"/>
+    </div>
+
+    <!-- Loading / Error -->
+    <div id="status-msg" class="text-zinc-500 text-sm mb-4 hidden"></div>
+
+    <!-- Table -->
+    <div class="rounded-2xl border border-zinc-800 bg-zinc-900 overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-zinc-800 text-zinc-400 text-left">
+            <th class="px-5 py-3 font-semibold cursor-pointer hover:text-violet-400" data-sort="Timestamp">Date ⌄</th>
+            <th class="px-5 py-3 font-semibold cursor-pointer hover:text-violet-400" data-sort="Name">Name</th>
+            <th class="px-5 py-3 font-semibold cursor-pointer hover:text-violet-400" data-sort="Email">Email</th>
+            <th class="px-5 py-3 font-semibold cursor-pointer hover:text-violet-400" data-sort="Phone">Phone</th>
+            <th class="px-5 py-3 font-semibold cursor-pointer hover:text-violet-400" data-sort="Course">Course</th>
+            <th class="px-5 py-3 font-semibold">Message</th>
+          </tr>
+        </thead>
+        <tbody id="leads-body">
+        </tbody>
+      </table>
+    </div>
+    <p id="empty-msg" class="text-center text-zinc-500 py-10 hidden">No leads found.</p>
+
+  </div>
+</div>
+
+<script>
+  let allLeads = [];
+  let sortKey = 'Timestamp';
+  let sortDir = -1;
+  let currentUser = null;
+
+  const loginScreen = document.getElementById('login-screen');
+  const dashboardScreen = document.getElementById('dashboard-screen');
+  const statusMsg = document.getElementById('status-msg');
+
+  // ── Netlify Identity setup ──
+  netlifyIdentity.init();
+
+  document.getElementById('login-btn').addEventListener('click', () => {
+    netlifyIdentity.open('login');
+  });
+
+  document.getElementById('logout-btn').addEventListener('click', () => {
+    netlifyIdentity.logout();
+  });
+
+  netlifyIdentity.on('login', user => {
+    currentUser = user;
+    netlifyIdentity.close();
+    loginScreen.classList.add('hidden');
+    dashboardScreen.classList.remove('hidden');
+    loadLeads();
+  });
+
+  netlifyIdentity.on('logout', () => {
+    currentUser = null;
+    dashboardScreen.classList.add('hidden');
+    loginScreen.classList.remove('hidden');
+  });
+
+  netlifyIdentity.on('init', user => {
+    if (user) {
+      currentUser = user;
+      loginScreen.classList.add('hidden');
+      dashboardScreen.classList.remove('hidden');
+      loadLeads();
+    }
+  });
+
+  // ── Load data from the secure Netlify Function (not directly from the sheet) ──
+  function loadLeads() {
+    statusMsg.textContent = 'Loading leads...';
+    statusMsg.classList.remove('hidden');
+
+    currentUser.jwt().then(token => {
+      fetch('/.netlify/functions/get-leads', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.error) {
+            statusMsg.textContent = 'Error: ' + data.error;
+            return;
+          }
+          allLeads = data;
+          statusMsg.classList.add('hidden');
+          renderStats();
+          renderTable();
+        })
+        .catch(() => {
+          statusMsg.textContent = 'Could not load leads. Try refreshing.';
+        });
+    });
+  }
+  document.getElementById('refresh-btn').addEventListener('click', loadLeads);
+
+  // ── Stats ──
+  function renderStats() {
+    document.getElementById('stat-total').textContent = allLeads.length;
+    const now = new Date();
+    const todayStr = now.toDateString();
+    const weekAgo = new Date(now - 7*24*60*60*1000);
+
+    let today = 0, week = 0;
+    const courseCounts = {};
+    allLeads.forEach(l => {
+      const d = new Date(l.Timestamp);
+      if (!isNaN(d)) {
+        if (d.toDateString() === todayStr) today++;
+        if (d >= weekAgo) week++;
+      }
+      const c = l.Course || 'Unknown';
+      courseCounts[c] = (courseCounts[c] || 0) + 1;
+    });
+    document.getElementById('stat-today').textContent = today;
+    document.getElementById('stat-week').textContent = week;
+
+    let topCourse = '--', topCount = 0;
+    Object.entries(courseCounts).forEach(([c, n]) => { if (n > topCount) { topCourse = c; topCount = n; } });
+    document.getElementById('stat-course').textContent = topCourse;
+  }
+
+  // ── Table ──
+  const tbody = document.getElementById('leads-body');
+  const emptyMsg = document.getElementById('empty-msg');
+
+  function renderTable() {
+    const q = document.getElementById('search-input').value.toLowerCase();
+    let rows = allLeads.filter(l =>
+      !q || Object.values(l).some(v => String(v).toLowerCase().includes(q))
+    );
+
+    rows.sort((a, b) => {
+      const av = a[sortKey] || '', bv = b[sortKey] || '';
+      return av > bv ? sortDir : av < bv ? -sortDir : 0;
+    });
+
+    tbody.innerHTML = '';
+    emptyMsg.classList.toggle('hidden', rows.length > 0);
+
+    rows.forEach(l => {
+      const tr = document.createElement('tr');
+      tr.className = 'border-b border-zinc-800/60';
+      tr.innerHTML = `
+        <td class="px-5 py-3 text-zinc-400 whitespace-nowrap">${formatDate(l.Timestamp)}</td>
+        <td class="px-5 py-3 font-medium">${escapeHtml(l.Name || '')}</td>
+        <td class="px-5 py-3 text-zinc-400">${escapeHtml(l.Email || '')}</td>
+        <td class="px-5 py-3 text-zinc-400 whitespace-nowrap">${escapeHtml(l.Phone || '')}</td>
+        <td class="px-5 py-3"><span class="px-2 py-1 rounded-md bg-violet-500/10 text-violet-400 text-xs font-medium">${escapeHtml(l.Course || '')}</span></td>
+        <td class="px-5 py-3 text-zinc-500 max-w-[240px] truncate" title="${escapeHtml(l.Message || '')}">${escapeHtml(l.Message || '')}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function formatDate(v) {
+    const d = new Date(v);
+    if (isNaN(d)) return v || '';
+    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  }
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  }
+
+  document.getElementById('search-input').addEventListener('input', renderTable);
+
+  document.querySelectorAll('th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+      const key = th.dataset.sort;
+      if (sortKey === key) sortDir *= -1; else { sortKey = key; sortDir = -1; }
+      renderTable();
+    });
+  });
+</script>
+</body>
+</html>
